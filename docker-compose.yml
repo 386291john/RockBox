@@ -1,0 +1,57 @@
+# ============================================================
+# RockBox — docker compose (rockbox-web + redis)
+# Supabase es externo (servicio gestionado).
+#
+# Uso:
+#   1) Copia .env.example a .env.local y rellena los valores.
+#   2) docker compose up --build
+#   3) Abre http://localhost:3000
+# ============================================================
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: rockbox-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rockbox-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Las NEXT_PUBLIC_* se necesitan en tiempo de build.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+    container_name: rockbox-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Variables de servidor (runtime).
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
+      AUTH_SECRET: ${AUTH_SECRET}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Dentro de la red de compose, Redis se resuelve por el nombre del servicio.
+      REDIS_URL: redis://redis:6379
+    env_file:
+      - .env.local
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:
